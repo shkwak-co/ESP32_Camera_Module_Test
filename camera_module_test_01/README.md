@@ -1,8 +1,8 @@
 # camera_module_test
 
-카메라 모듈 테스트중.
+Testing Camera Module (ESP32-S3-EYE)
 
-진행상황__________________
+log__________________
 1. config
-2. PSRAM 사용 setting
-3. taking picture 메시지 출력 -> 확인은 어떻게?
+2. using PSRAM setting
+3. capture log
