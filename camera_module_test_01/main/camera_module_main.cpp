@@ -179,6 +179,7 @@ capture_handler (httpd_req_t * req)
   return res;
 }
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
 httpd_uri_t pic_uri = {
@@ -312,6 +313,130 @@ index_handler (httpd_req_t * req)
 void
 open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool return_fb)
 {
+=======
+static esp_err_t
+stream_handler (httpd_req_t * req)
+{
+  camera_fb_t *frame = NULL;
+  struct timeval _timestamp;
+  esp_err_t res = ESP_OK;
+  size_t _jpg_buf_len = 0;
+  uint8_t *_jpg_buf = NULL;
+  char *part_buf[128];
+
+  res = httpd_resp_set_type (req, _STREAM_CONTENT_TYPE);
+  if (res != ESP_OK)
+    {
+      return res;
+    }
+
+  httpd_resp_set_hdr (req, "Access-Control-Allow-Origin", "*");
+  httpd_resp_set_hdr (req, "X-Framerate", "60");
+
+  while (true)
+    {
+      if (xQueueReceive (xQueueFrameI, &frame, portMAX_DELAY))
+        {
+          _timestamp.tv_sec = frame->timestamp.tv_sec;
+          _timestamp.tv_usec = frame->timestamp.tv_usec;
+
+          if (frame->format == PIXFORMAT_JPEG)
+            {
+              _jpg_buf = frame->buf;
+              _jpg_buf_len = frame->len;
+            }
+          else if (!frame2jpg (frame, 80, &_jpg_buf, &_jpg_buf_len))
+            {
+              ESP_LOGE (TAG, "JPEG compression failed");
+              res = ESP_FAIL;
+            }
+        }
+      else
+        {
+          res = ESP_FAIL;
+        }
+
+      if (res == ESP_OK)
+        {
+          res = httpd_resp_send_chunk (req, _STREAM_BOUNDARY, strlen (_STREAM_BOUNDARY));
+        }
+
+      if (res == ESP_OK)
+        {
+          size_t hlen =
+            snprintf ((char *) part_buf, 128, _STREAM_PART, _jpg_buf_len, _timestamp.tv_sec, _timestamp.tv_usec);
+          res = httpd_resp_send_chunk (req, (const char *) part_buf, hlen);
+        }
+
+      if (res == ESP_OK)
+        {
+          res = httpd_resp_send_chunk (req, (const char *) _jpg_buf, _jpg_buf_len);
+        }
+
+      if (frame->format != PIXFORMAT_JPEG)
+        {
+          free (_jpg_buf);
+          _jpg_buf = NULL;
+        }
+
+      if (xQueueFrameO)
+        {
+          xQueueSend (xQueueFrameO, &frame, portMAX_DELAY);
+        }
+      else if (gReturnFB)
+        {
+          esp_camera_fb_return (frame);
+        }
+      else
+        {
+          free (frame);
+        }
+
+      if (res != ESP_OK)
+        {
+          break;
+        }
+    }
+
+  return res;
+}
+
+/**
+ * index_handler
+ * _binary_..._html_gz 파일을 읽어서 웹 서버을 구성
+ * 
+ * 사용중인 EYE보드는 OV2640 카메라 모듈을 사용하므로 
+ * 다른 모델에 해당하는 코드는 삭제했음.
+*/
+static esp_err_t
+index_handler (httpd_req_t * req)
+{
+  extern const unsigned char index_ov2640_html_gz_start[] asm ("_binary_index_ov2640_html_gz_start");
+  extern const unsigned char index_ov2640_html_gz_end[] asm ("_binary_index_ov2640_html_gz_end");
+  size_t index_ov2640_html_gz_len = index_ov2640_html_gz_end - index_ov2640_html_gz_start;
+
+  httpd_resp_set_type (req, "text/html");
+  httpd_resp_set_hdr (req, "Content-Encoding", "gzip");
+  sensor_t *s = esp_camera_sensor_get ();
+  if (s != NULL)
+    {
+      if (s->id.PID == OV2640_PID)
+        {
+          return httpd_resp_send (req, (const char *) index_ov2640_html_gz_start, index_ov2640_html_gz_len);
+        }
+    }
+  else
+    {
+      ESP_LOGE (TAG, "Camera sensor not found");
+
+    }
+  return httpd_resp_send_500 (req);
+}
+
+void
+open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool return_fb)
+{
+>>>>>>> 83ea450894801452ba5281487cff572c27793f00
   xQueueFrameI = frame_i;
   xQueueFrameO = frame_o;
   gReturnFB = return_fb;
@@ -454,10 +579,13 @@ void camera_settings(const pixformat_t pixel_fromat,
 extern "C" void
 app_main (void)
 {
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
   // 기존 AP모드 설정과 동일하여 그냥 사용함
 >>>>>>> Stashed changes
+=======
+>>>>>>> 83ea450894801452ba5281487cff572c27793f00
   app_wifi_main ();
   xQueueCameraFrame = xQueueCreate (2, sizeof (camera_fb_t *));
   //camera_settings (PIXFORMAT_RGB565, FRAMESIZE_QVGA, 2, xQueueCameraFrame);
