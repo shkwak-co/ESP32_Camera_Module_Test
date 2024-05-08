@@ -11,11 +11,8 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-bridge.cfg"
   ],
+  "idf.portWin": "COM5",
   "idf.pythonBinPathWin": "d:\\esp\\espressif\\python_env\\idf5.2_py3.11_env\\Scripts\\python.exe",
   "idf.toolsPathWin": "d:\\esp\\espressif",
-  "idf.portWin": "COM5",
-  "idf.flashType": "UART",
-  "files.associations": {
-    "who_camera.h": "c"
-  }
+  "idf.flashType": "UART"
 }
