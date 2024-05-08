@@ -1,0 +1,3 @@
+factory, app,  factory, 0x010000, 3840K
+nvs,     data, nvs,     0x3D0000, 16K
+fr,      32,   32,      0x3E0000, 128K
