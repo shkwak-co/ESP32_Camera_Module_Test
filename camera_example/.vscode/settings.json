@@ -9,10 +9,15 @@
   },
   "idf.espIdfPathWin": "d:\\esp\\v5.2\\esp-idf",
   "idf.openOcdConfigs": [
-    "board/esp32s3-bridge.cfg"
+    "board/esp32s3-builtin.cfg"
   ],
   "idf.pythonBinPathWin": "d:\\esp\\espressif\\python_env\\idf5.2_py3.11_env\\Scripts\\python.exe",
   "idf.toolsPathWin": "d:\\esp\\espressif",
-  "idf.portWin": "COM5",
-  "idf.flashType": "UART"
+  "files.associations": {
+    "esp_camera.h": "c",
+    "who_camera.h": "c",
+    "string.h": "c"
+  },
+  "idf.flashType": "UART",
+  "idf.portWin": "COM5"
 }
