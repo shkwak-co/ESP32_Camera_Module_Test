@@ -10,7 +10,8 @@
         "${config:idf.espAdfPath}/components/**",
         "${config:idf.espAdfPathWin}/components/**",
         "${workspaceFolder}/**",
-        "$[workspaceFolder}/build/config"
+        "$[workspaceFolder}/build/config",
+        "${workspaceFolder}/../components/**"
       ],
       "browse": {
         "path": [
