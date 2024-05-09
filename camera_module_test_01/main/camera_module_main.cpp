@@ -44,6 +44,13 @@
 #include "esp_err.h"
 #include "esp_wifi_types.h"
 
+/**
+ * Queue 2개 (xQueueFrameI, xQueueFrameO만 사용)
+ * 각 기능별 Queue 복사해서 사용
+*/
+//#define ONLY_2_QUEUE
+
+
 static const char *TAG = "UNIT_TEST";
 
 // Prototype BEGIN
@@ -51,11 +58,15 @@ static size_t jpg_encode_stream (void *arg, size_t index, const void *data, size
 static esp_err_t capture_handler (httpd_req_t * req);
 static esp_err_t stream_handler (httpd_req_t * req);
 //static esp_err_t index_handler (httpd_req_t * req);
-void open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool return_fb);
 static void task_process_handler (void *arg);
+#ifndef ONLY_2_QUEUE
+void open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool return_fb);
 void camera_settings (const pixformat_t pixel_fromat,
                       const framesize_t frame_size, const uint8_t fb_count, const QueueHandle_t frame_o);
-
+#else
+void open_httpd (const bool return_fb);
+void camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size, const uint8_t fb_count);
+#endif
 // Prototype END
 
 // Camera Config BEGIN
@@ -103,9 +114,10 @@ static const char *_STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char *_STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char *_STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Timestamp: %d.%06d\r\n\r\n";
 
+#ifndef ONLY_2_QUEUE
 static QueueHandle_t xQueueCameraFrame = NULL;
 static QueueHandle_t xQueueCameraO = NULL;
-
+#endif
 /**
  * httpd
  * - stream_httpd
@@ -323,12 +335,18 @@ stream_handler (httpd_req_t * req)
 //     }
 //   return httpd_resp_send_500 (req);
 // }
-
+#ifndef ONLY_2_QUEUE
 void
 open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool return_fb)
+#else
+void
+open_httpd (const bool return_fb)
+#endif
 {
+#ifndef ONLY_2_QUEUE
   xQueueFrameI = frame_i;
   xQueueFrameO = frame_o;
+#endif
   //xQueueFrameO = NULL;
   gReturnFB = return_fb;
 
@@ -384,14 +402,22 @@ task_process_handler (void *pvParam)
     {
       camera_fb_t *frame = esp_camera_fb_get ();
       if (frame)
+#ifndef ONLY_2_QUEUE
         xQueueSend (xQueueCameraO, &frame, portMAX_DELAY);
-        //xQueueSend (xQueueFrameI, &frame, portMAX_DELAY);
+#else
+        xQueueSend (xQueueFrameI, &frame, portMAX_DELAY);
+#endif
     }
 }
 
+#ifndef ONLY_2_QUEUE
 void
 camera_settings (const pixformat_t pixel_fromat,
                  const framesize_t frame_size, const uint8_t fb_count, const QueueHandle_t frame_o)
+#else
+void
+camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size, const uint8_t fb_count)
+#endif
 {
   ESP_LOGI (TAG, "Camera module is %s", CAMERA_MODULE_NAME);
 
@@ -438,8 +464,9 @@ camera_settings (const pixformat_t pixel_fromat,
     {
       s->set_vflip (s, 1);
     }
-
+#ifndef ONLY_2_QUEUE
   xQueueCameraO = frame_o;
+#endif
   xTaskCreatePinnedToCore (task_process_handler, TAG, 3 * 1024, NULL, 5, NULL, 1);
 }
 
@@ -448,16 +475,19 @@ extern "C" void
 app_main (void)
 {
   app_wifi_main ();
+#ifndef ONLY_2_QUEUE
   xQueueCameraFrame = xQueueCreate (2, sizeof (camera_fb_t *));
-  xQueueFrameI = xQueueCreate (2, sizeof (camera_fb_t *));
-
 
   //camera_settings (PIXFORMAT_RGB565, FRAMESIZE_QVGA, 2, xQueueCameraFrame);
+
   camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA, 2, xQueueCameraFrame);
   app_mdns_main ();
   open_httpd (xQueueCameraFrame, NULL, true);
+#else
+  xQueueFrameI = xQueueCreate (2, sizeof (camera_fb_t *));
 
-  // camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA, 2);
-  // app_mdns_main ();
-  // open_httpd (true);
+  camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA, 2);
+  app_mdns_main ();
+  open_httpd (true);
+#endif
 }
