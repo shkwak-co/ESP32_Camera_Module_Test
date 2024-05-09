@@ -50,10 +50,11 @@ static const char *TAG = "UNIT_TEST";
 static size_t jpg_encode_stream (void *arg, size_t index, const void *data, size_t len);
 static esp_err_t capture_handler (httpd_req_t * req);
 static esp_err_t stream_handler (httpd_req_t * req);
-static esp_err_t index_handler (httpd_req_t * req);
+//static esp_err_t index_handler (httpd_req_t * req);
 void open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool return_fb);
-
-
+static void task_process_handler (void *arg);
+void camera_settings (const pixformat_t pixel_fromat,
+                      const framesize_t frame_size, const uint8_t fb_count, const QueueHandle_t frame_o);
 
 // Prototype END
 
@@ -107,6 +108,11 @@ static QueueHandle_t xQueueCameraO = NULL;
 
 /**
  * httpd
+ * - stream_httpd
+ * multipart stream을 사용하는 web server
+ * 
+ * - camera_httpd
+ * web server 
  * 
  * - xQueueFrameI
  * 카메라로부터 받는 프레임 버퍼
@@ -115,8 +121,7 @@ static QueueHandle_t xQueueCameraO = NULL;
  * 서버로 전송하는 프레임 버퍼
  * 
  * - gReturnFB
- * 프레임 버퍼가 사용 가능한지 확인용
- * 
+ * 프레임 버퍼가 사용가능 여부 확인
 */
 httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
@@ -125,27 +130,28 @@ static QueueHandle_t xQueueFrameO = NULL;
 static bool gReturnFB = true;
 
 // server open BEGIN
-typedef struct
-{
-  httpd_req_t *req;
-  size_t len;
-} jpg_chunking_t;
 
-static size_t
-jpg_encode_stream (void *arg, size_t index, const void *data, size_t len)
-{
-  jpg_chunking_t *j = (jpg_chunking_t *) arg;
-  if (!index)
-    {
-      j->len = 0;
-    }
-  if (httpd_resp_send_chunk (j->req, (const char *) data, len) != ESP_OK)
-    {
-      return 0;
-    }
-  j->len += len;
-  return len;
-}
+// typedef struct
+// {
+//   httpd_req_t *req;
+//   size_t len;
+// } jpg_chunking_t;
+
+// static size_t
+// jpg_encode_stream (void *arg, size_t index, const void *data, size_t len)
+// {
+//   jpg_chunking_t *j = (jpg_chunking_t *) arg;
+//   if (!index)
+//     {
+//       j->len = 0;
+//     }
+//   if (httpd_resp_send_chunk (j->req, (const char *) data, len) != ESP_OK)
+//     {
+//       return 0;
+//     }
+//   j->len += len;
+//   return len;
+// }
 
 
 static esp_err_t
@@ -164,19 +170,17 @@ capture_handler (httpd_req_t * req)
       snprintf (ts, 32, "%lld.%06ld", frame->timestamp.tv_sec, frame->timestamp.tv_usec);
       httpd_resp_set_hdr (req, "X-Timestamp", (const char *) ts);
 
-      // size_t fb_len = 0;
       if (frame->format == PIXFORMAT_JPEG)
         {
-          // fb_len = frame->len;
           res = httpd_resp_send (req, (const char *) frame->buf, frame->len);
         }
-      else
-        {
-          jpg_chunking_t jchunk = { req, 0 };
-          res = frame2jpg_cb (frame, 80, jpg_encode_stream, &jchunk) ? ESP_OK : ESP_FAIL;
-          httpd_resp_send_chunk (req, NULL, 0);
-          // fb_len = jchunk.len;
-        }
+      // else
+      //   {
+      //     jpg_chunking_t jchunk = { req, 0 };
+      //     res = frame2jpg_cb (frame, 80, jpg_encode_stream, &jchunk) ? ESP_OK : ESP_FAIL;
+      //     httpd_resp_send_chunk (req, NULL, 0);
+      //     // fb_len = jchunk.len;
+      //   }
 
       if (xQueueFrameO)
         {
@@ -295,30 +299,30 @@ stream_handler (httpd_req_t * req)
  * 사용중인 EYE보드는 OV2640 카메라 모듈을 사용하므로 
  * 다른 모델에 해당하는 코드는 삭제했음.
 */
-static esp_err_t
-index_handler (httpd_req_t * req)
-{
-  extern const unsigned char index_ov2640_html_gz_start[] asm ("_binary_index_ov2640_html_gz_start");
-  extern const unsigned char index_ov2640_html_gz_end[] asm ("_binary_index_ov2640_html_gz_end");
-  size_t index_ov2640_html_gz_len = index_ov2640_html_gz_end - index_ov2640_html_gz_start;
-
-  httpd_resp_set_type (req, "text/html");
-  httpd_resp_set_hdr (req, "Content-Encoding", "gzip");
-  sensor_t *s = esp_camera_sensor_get ();
-  if (s != NULL)
-    {
-      if (s->id.PID == OV2640_PID)
-        {
-          return httpd_resp_send (req, (const char *) index_ov2640_html_gz_start, index_ov2640_html_gz_len);
-        }
-    }
-  else
-    {
-      ESP_LOGE (TAG, "Camera sensor not found");
-
-    }
-  return httpd_resp_send_500 (req);
-}
+// static esp_err_t
+// index_handler (httpd_req_t * req)
+// {
+//   extern const unsigned char index_ov2640_html_gz_start[] asm ("_binary_index_ov2640_html_gz_start");
+//   extern const unsigned char index_ov2640_html_gz_end[] asm ("_binary_index_ov2640_html_gz_end");
+//   size_t index_ov2640_html_gz_len = index_ov2640_html_gz_end - index_ov2640_html_gz_start;
+//
+//   httpd_resp_set_type (req, "text/html");
+//   httpd_resp_set_hdr (req, "Content-Encoding", "gzip");
+//   sensor_t *s = esp_camera_sensor_get ();
+//   if (s != NULL)
+//     {
+//       if (s->id.PID == OV2640_PID)
+//         {
+//           return httpd_resp_send (req, (const char *) index_ov2640_html_gz_start, index_ov2640_html_gz_len);
+//         }
+//     }
+//   else
+//     {
+//       ESP_LOGE (TAG, "Camera sensor not found");
+//
+//     }
+//   return httpd_resp_send_500 (req);
+// }
 
 void
 open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool return_fb)
@@ -330,12 +334,12 @@ open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool
   httpd_config_t config = HTTPD_DEFAULT_CONFIG ();
 
 
-  httpd_uri_t index_uri = {
-    .uri = "/",
-    .method = HTTP_GET,
-    .handler = index_handler,
-    .user_ctx = NULL
-  };
+  // httpd_uri_t index_uri = {
+  //   .uri = "/",
+  //   .method = HTTP_GET,
+  //   .handler = index_handler,
+  //   .user_ctx = NULL
+  // };
 
   httpd_uri_t stream_uri = {
     .uri = "/stream",
@@ -354,82 +358,87 @@ open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool
   ESP_LOGI (TAG, "Starting web server on port: '%d'", config.server_port);
   if (httpd_start (&camera_httpd, &config) == ESP_OK)
     {
-      httpd_register_uri_handler (camera_httpd, &index_uri);
+      // httpd_register_uri_handler (camera_httpd, &index_uri);
       httpd_register_uri_handler (camera_httpd, &capture_uri);
+
+      httpd_register_uri_handler (camera_httpd, &stream_uri);
     }
 
-  config.server_port += 1;
-  config.ctrl_port += 1;
-  ESP_LOGI (TAG, "Starting stream server on port: '%d'", config.server_port);
-  if (httpd_start (&stream_httpd, &config) == ESP_OK)
-    {
-      httpd_register_uri_handler (stream_httpd, &stream_uri);
-    }
+  // config.server_port += 1;
+  // config.ctrl_port += 1;
+  // ESP_LOGI (TAG, "Starting stream server on port: '%d'", config.server_port);
+  // if (httpd_start (&stream_httpd, &config) == ESP_OK)
+  //   {
+  //     httpd_register_uri_handler (stream_httpd, &stream_uri);
+  //   }
 }
+
 // server open END
 
 // camera init BEGIN
-static void task_process_handler(void *arg)
+static void
+task_process_handler (void *pvParam)
 {
-    while (true)
+  while (true)
     {
-        camera_fb_t *frame = esp_camera_fb_get();
-        if (frame)
-            xQueueSend(xQueueCameraO, &frame, portMAX_DELAY);
+      camera_fb_t *frame = esp_camera_fb_get ();
+      if (frame)
+        xQueueSend (xQueueCameraO, &frame, portMAX_DELAY);
     }
 }
 
-void camera_settings(const pixformat_t pixel_fromat,
-                     const framesize_t frame_size,
-                     const uint8_t fb_count,
-                     const QueueHandle_t frame_o)
+void
+camera_settings (const pixformat_t pixel_fromat,
+                 const framesize_t frame_size, const uint8_t fb_count, const QueueHandle_t frame_o)
 {
-    ESP_LOGI(TAG, "Camera module is %s", CAMERA_MODULE_NAME);
+  ESP_LOGI (TAG, "Camera module is %s", CAMERA_MODULE_NAME);
 
-    camera_config_t config;
-    config.ledc_channel = LEDC_CHANNEL_0;
-    config.ledc_timer = LEDC_TIMER_0;
-    config.pin_d0 = CAMERA_PIN_D0;
-    config.pin_d1 = CAMERA_PIN_D1;
-    config.pin_d2 = CAMERA_PIN_D2;
-    config.pin_d3 = CAMERA_PIN_D3;
-    config.pin_d4 = CAMERA_PIN_D4;
-    config.pin_d5 = CAMERA_PIN_D5;
-    config.pin_d6 = CAMERA_PIN_D6;
-    config.pin_d7 = CAMERA_PIN_D7;
-    config.pin_xclk = CAMERA_PIN_XCLK;
-    config.pin_pclk = CAMERA_PIN_PCLK;
-    config.pin_vsync = CAMERA_PIN_VSYNC;
-    config.pin_href = CAMERA_PIN_HREF;
-    config.pin_sscb_sda = CAMERA_PIN_SIOD;
-    config.pin_sscb_scl = CAMERA_PIN_SIOC;
-    config.pin_pwdn = CAMERA_PIN_PWDN;
-    config.pin_reset = CAMERA_PIN_RESET;
-    config.xclk_freq_hz = XCLK_FREQ_HZ;
-    config.pixel_format = pixel_fromat;
-    config.frame_size = frame_size;
-    config.jpeg_quality = 12;
-    config.fb_count = fb_count;
-    config.fb_location = CAMERA_FB_IN_PSRAM;
-    config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-    //config.grab_mode = CAMERA_GRAB_LATEST;
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = CAMERA_PIN_D0;
+  config.pin_d1 = CAMERA_PIN_D1;
+  config.pin_d2 = CAMERA_PIN_D2;
+  config.pin_d3 = CAMERA_PIN_D3;
+  config.pin_d4 = CAMERA_PIN_D4;
+  config.pin_d5 = CAMERA_PIN_D5;
+  config.pin_d6 = CAMERA_PIN_D6;
+  config.pin_d7 = CAMERA_PIN_D7;
+  config.pin_xclk = CAMERA_PIN_XCLK;
+  config.pin_pclk = CAMERA_PIN_PCLK;
+  config.pin_vsync = CAMERA_PIN_VSYNC;
+  config.pin_href = CAMERA_PIN_HREF;
+  config.pin_sscb_sda = CAMERA_PIN_SIOD;
+  config.pin_sscb_scl = CAMERA_PIN_SIOC;
+  config.pin_pwdn = CAMERA_PIN_PWDN;
+  config.pin_reset = CAMERA_PIN_RESET;
+  config.xclk_freq_hz = XCLK_FREQ_HZ;
+  config.pixel_format = pixel_fromat;
+  config.frame_size = frame_size;
+  config.jpeg_quality = 12;
+  config.fb_count = fb_count;
+  config.fb_location = CAMERA_FB_IN_PSRAM;
+  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+  //config.grab_mode = CAMERA_GRAB_LATEST;
 
-    // camera init
-    esp_err_t err = esp_camera_init(&config);
-    if (err != ESP_OK)
+  // camera init
+  esp_err_t err = esp_camera_init (&config);
+  if (err != ESP_OK)
     {
-        ESP_LOGE(TAG, "Camera init failed with error 0x%x", err);
-        return;
+      ESP_LOGE (TAG, "Camera init failed with error 0x%x", err);
+      return;
     }
 
-    sensor_t *s = esp_camera_sensor_get();
+  sensor_t *s = esp_camera_sensor_get ();
 
-    if (s->id.PID == OV2640_PID) {
-        s->set_vflip(s, 1); //flip it back    
+  // 상하 반전
+  if (s->id.PID == OV2640_PID)
+    {
+      s->set_vflip (s, 1);  
     }
 
-    xQueueCameraO = frame_o;
-    xTaskCreatePinnedToCore(task_process_handler, TAG, 3 * 1024, NULL, 5, NULL, 1);
+  xQueueCameraO = frame_o;
+  xTaskCreatePinnedToCore (task_process_handler, TAG, 3 * 1024, NULL, 5, NULL, 1);
 }
 
 // camera init END
