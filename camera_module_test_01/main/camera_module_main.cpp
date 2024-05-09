@@ -57,7 +57,31 @@ void open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const
 
 // Prototype END
 
+// Camera Config BEGIN
+/**
+ * who_camera.h에 보드별 pin 구성이 있음.
+*/
+#define CAMERA_MODULE_NAME "ESP-S3-EYE"
+#define CAMERA_PIN_PWDN -1
+#define CAMERA_PIN_RESET -1
 
+#define CAMERA_PIN_VSYNC 6
+#define CAMERA_PIN_HREF 7
+#define CAMERA_PIN_PCLK 13
+#define CAMERA_PIN_XCLK 15
+
+#define CAMERA_PIN_SIOD 4
+#define CAMERA_PIN_SIOC 5
+
+#define CAMERA_PIN_D0 11
+#define CAMERA_PIN_D1 9
+#define CAMERA_PIN_D2 8
+#define CAMERA_PIN_D3 10
+#define CAMERA_PIN_D4 12
+#define CAMERA_PIN_D5 18
+#define CAMERA_PIN_D6 17
+#define CAMERA_PIN_D7 16
+// Camera Config END
 
 /**
  * @brief
@@ -77,7 +101,6 @@ void open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const
 static const char *_STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
 static const char *_STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char *_STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Timestamp: %d.%06d\r\n\r\n";
-
 
 static QueueHandle_t xQueueCameraFrame = NULL;
 static QueueHandle_t xQueueCameraO = NULL;
@@ -102,7 +125,6 @@ static QueueHandle_t xQueueFrameO = NULL;
 static bool gReturnFB = true;
 
 // server open BEGIN
-
 typedef struct
 {
   httpd_req_t *req;
@@ -329,7 +351,6 @@ open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool
     .user_ctx = NULL
   };
 
-
   ESP_LOGI (TAG, "Starting web server on port: '%d'", config.server_port);
   if (httpd_start (&camera_httpd, &config) == ESP_OK)
     {
@@ -345,7 +366,6 @@ open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool
       httpd_register_uri_handler (stream_httpd, &stream_uri);
     }
 }
-
 // server open END
 
 // camera init BEGIN
@@ -365,21 +385,6 @@ void camera_settings(const pixformat_t pixel_fromat,
                      const QueueHandle_t frame_o)
 {
     ESP_LOGI(TAG, "Camera module is %s", CAMERA_MODULE_NAME);
-
-#if CONFIG_CAMERA_MODULE_ESP_EYE || CONFIG_CAMERA_MODULE_ESP32_CAM_BOARD
-    /* IO13, IO14 is designed for JTAG by default,
-     * to use it as generalized input,
-     * firstly declair it as pullup input */
-    gpio_config_t conf;
-    conf.mode = GPIO_MODE_INPUT;
-    conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    conf.intr_type = GPIO_INTR_DISABLE;
-    conf.pin_bit_mask = 1LL << 13;
-    gpio_config(&conf);
-    conf.pin_bit_mask = 1LL << 14;
-    gpio_config(&conf);
-#endif
 
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
@@ -407,7 +412,7 @@ void camera_settings(const pixformat_t pixel_fromat,
     config.fb_count = fb_count;
     config.fb_location = CAMERA_FB_IN_PSRAM;
     config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-    //config.grab_mode = CAMERA_GRAB_LATEST; //차이를 잘 모르겠음
+    //config.grab_mode = CAMERA_GRAB_LATEST;
 
     // camera init
     esp_err_t err = esp_camera_init(&config);
@@ -418,28 +423,16 @@ void camera_settings(const pixformat_t pixel_fromat,
     }
 
     sensor_t *s = esp_camera_sensor_get();
-    if (s->id.PID == OV3660_PID || s->id.PID == OV2640_PID) {
-        s->set_vflip(s, 1); //flip it back    
-    } else if (s->id.PID == GC0308_PID) {
-        s->set_hmirror(s, 0);
-    } else if (s->id.PID == GC032A_PID) {
-        s->set_vflip(s, 1);
-    }
 
-    //initial sensors are flipped vertically and colors are a bit saturated
-    if (s->id.PID == OV3660_PID)
-    {
-        s->set_brightness(s, 1);  //up the blightness just a bit
-        s->set_saturation(s, -2); //lower the saturation
+    if (s->id.PID == OV2640_PID) {
+        s->set_vflip(s, 1); //flip it back    
     }
 
     xQueueCameraO = frame_o;
     xTaskCreatePinnedToCore(task_process_handler, TAG, 3 * 1024, NULL, 5, NULL, 1);
 }
 
-
 // camera init END
-
 extern "C" void
 app_main (void)
 {
