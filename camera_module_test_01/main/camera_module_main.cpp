@@ -48,7 +48,7 @@
  * Queue 2개 (xQueueFrameI, xQueueFrameO만 사용)
  * 각 기능별 Queue 복사해서 사용
 */
-//#define ONLY_2_QUEUE
+#define ONLY_2_QUEUE
 
 
 static const char *TAG = "UNIT_TEST";
