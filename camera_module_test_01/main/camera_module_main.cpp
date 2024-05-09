@@ -1,5 +1,4 @@
 #include <string.h>
-#include <stdio.h>
 
 // who_camera.h
 #include "who_camera.h"
@@ -51,9 +50,9 @@ static size_t jpg_encode_stream (void *arg, size_t index, const void *data, size
 static esp_err_t capture_handler (httpd_req_t * req);
 static esp_err_t stream_handler (httpd_req_t * req);
 static esp_err_t index_handler (httpd_req_t * req);
-void open_httpd (const bool return_fb);
+void open_httpd ();
 static void task_process_handler (void *arg);
-void camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size, const uint8_t fb_count);
+void camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size);
 
 // Prototype END
 
@@ -101,46 +100,24 @@ static const char *_STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char *_STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char *_STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Timestamp: %d.%06d\r\n\r\n";
 
-/**
- * - xQueueFrameI
- * 카메라로부터 받는 프레임 버퍼
- * 
- * - xQueueFrameO
- * 서버로 전송하는 프레임 버퍼
- * 
- * - gReturnFB
- * 프레임 버퍼가 사용 가능한지 확인용
- * 
-*/
-httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
 static QueueHandle_t xQueueFrameI = NULL;
-static QueueHandle_t xQueueFrameO = NULL;
-static bool gReturnFB = true;
 
-// server open BEGIN
-typedef struct
-{
-  httpd_req_t *req;
-  size_t len;
-} jpg_chunking_t;
 
-static size_t
-jpg_encode_stream (void *arg, size_t index, const void *data, size_t len)
+
+extern "C" void
+app_main (void)
 {
-  jpg_chunking_t *j = (jpg_chunking_t *) arg;
-  if (!index)
-    {
-      j->len = 0;
-    }
-  if (httpd_resp_send_chunk (j->req, (const char *) data, len) != ESP_OK)
-    {
-      return 0;
-    }
-  j->len += len;
-  return len;
+  app_wifi_main ();
+  xQueueFrameI = xQueueCreate (2, sizeof (camera_fb_t *));
+  camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA);
+  //camera_settings (PIXFORMAT_JPEG, FRAMESIZE_XGA);
+  app_mdns_main ();
+  open_httpd ();
 }
 
+
+// server open BEGIN
 
 static esp_err_t
 capture_handler (httpd_req_t * req)
@@ -162,34 +139,9 @@ capture_handler (httpd_req_t * req)
         {
           res = httpd_resp_send (req, (const char *) frame->buf, frame->len);
         }
-      else
-        {
-          jpg_chunking_t jchunk = { req, 0 };
-          res = frame2jpg_cb (frame, 80, jpg_encode_stream, &jchunk) ? ESP_OK : ESP_FAIL;
-          httpd_resp_send_chunk (req, NULL, 0);
-        }
 
-      // if (xQueueFrameO)
-      //   {
-      //     xQueueSend (xQueueFrameO, &frame, portMAX_DELAY);
-      //   }
-      // else if (gReturnFB)
-      //   {
-      //     esp_camera_fb_return (frame);
-      //   }
-      // else
-      //   {
-      //     free (frame);
-      //   }
+      esp_camera_fb_return (frame);
 
-      if (gReturnFB)
-        {
-          esp_camera_fb_return (frame);
-        }
-      else
-        {
-          free (frame);
-        }
     }
   else
     {
@@ -266,26 +218,8 @@ stream_handler (httpd_req_t * req)
           _jpg_buf = NULL;
         }
 
-      // if (xQueueFrameO)
-      //   {
-      //     xQueueSend (xQueueFrameO, &frame, portMAX_DELAY);
-      //   }
-      // else if (gReturnFB)
-      //   {
-      //     esp_camera_fb_return (frame);
-      //   }
-      // else
-      //   {
-      //     free (frame);
-      //   }
-      if (gReturnFB)
-        {
-          esp_camera_fb_return (frame);
-        }
-      else
-        {
-          free (frame);
-        }
+      esp_camera_fb_return (frame);
+
 
       if (res != ESP_OK)
         {
@@ -296,52 +230,10 @@ stream_handler (httpd_req_t * req)
   return res;
 }
 
-/**
- * index_handler
- * _binary_..._html_gz 파일을 읽어서 웹 서버을 구성
- * 
- * 사용중인 EYE보드는 OV2640 카메라 모듈을 사용하므로 
- * 다른 모델에 해당하는 코드는 삭제했음.
-*/
-static esp_err_t
-index_handler (httpd_req_t * req)
-{
-  extern const unsigned char index_ov2640_html_gz_start[] asm ("_binary_index_ov2640_html_gz_start");
-  extern const unsigned char index_ov2640_html_gz_end[] asm ("_binary_index_ov2640_html_gz_end");
-  size_t index_ov2640_html_gz_len = index_ov2640_html_gz_end - index_ov2640_html_gz_start;
-
-  httpd_resp_set_type (req, "text/html");
-  httpd_resp_set_hdr (req, "Content-Encoding", "gzip");
-  sensor_t *s = esp_camera_sensor_get ();
-  if (s != NULL)
-    {
-      if (s->id.PID == OV2640_PID)
-        {
-          return httpd_resp_send (req, (const char *) index_ov2640_html_gz_start, index_ov2640_html_gz_len);
-        }
-    }
-  else
-    {
-      ESP_LOGE (TAG, "Camera sensor not found");
-
-    }
-  return httpd_resp_send_500 (req);
-}
-
 void
-open_httpd (const bool return_fb)
+open_httpd ()
 {
-  gReturnFB = return_fb;
-
   httpd_config_t config = HTTPD_DEFAULT_CONFIG ();
-
-
-  httpd_uri_t index_uri = {
-    .uri = "/",
-    .method = HTTP_GET,
-    .handler = index_handler,
-    .user_ctx = NULL
-  };
 
   httpd_uri_t stream_uri = {
     .uri = "/stream",
@@ -360,17 +252,11 @@ open_httpd (const bool return_fb)
   ESP_LOGI (TAG, "Starting web server on port: '%d'", config.server_port);
   if (httpd_start (&camera_httpd, &config) == ESP_OK)
     {
-      httpd_register_uri_handler (camera_httpd, &index_uri);
+      httpd_register_uri_handler (camera_httpd, &stream_uri);
       httpd_register_uri_handler (camera_httpd, &capture_uri);
     }
 
-  config.server_port += 1;
-  config.ctrl_port += 1;
-  ESP_LOGI (TAG, "Starting stream server on port: '%d'", config.server_port);
-  if (httpd_start (&stream_httpd, &config) == ESP_OK)
-    {
-      httpd_register_uri_handler (stream_httpd, &stream_uri);
-    }
+
 }
 
 // server open END
@@ -388,7 +274,7 @@ task_process_handler (void *arg)
 }
 
 void
-camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size, const uint8_t fb_count)
+camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size)
 {
   ESP_LOGI (TAG, "Camera module is %s", CAMERA_MODULE_NAME);
 
@@ -415,7 +301,7 @@ camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size, c
   config.pixel_format = pixel_fromat;
   config.frame_size = frame_size;
   config.jpeg_quality = 12;
-  config.fb_count = fb_count;
+  config.fb_count = 2;
   config.fb_location = CAMERA_FB_IN_PSRAM;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   //config.grab_mode = CAMERA_GRAB_LATEST;
@@ -440,13 +326,3 @@ camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size, c
 }
 
 // camera init END
-
-extern "C" void
-app_main (void)
-{
-  app_wifi_main ();
-  xQueueFrameI = xQueueCreate (2, sizeof (camera_fb_t *));
-  camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA, 2);
-  app_mdns_main ();
-  open_httpd (true);
-}
