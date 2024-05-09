@@ -329,6 +329,7 @@ open_httpd (const QueueHandle_t frame_i, const QueueHandle_t frame_o, const bool
 {
   xQueueFrameI = frame_i;
   xQueueFrameO = frame_o;
+  //xQueueFrameO = NULL;
   gReturnFB = return_fb;
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG ();
@@ -384,6 +385,7 @@ task_process_handler (void *pvParam)
       camera_fb_t *frame = esp_camera_fb_get ();
       if (frame)
         xQueueSend (xQueueCameraO, &frame, portMAX_DELAY);
+        //xQueueSend (xQueueFrameI, &frame, portMAX_DELAY);
     }
 }
 
@@ -434,7 +436,7 @@ camera_settings (const pixformat_t pixel_fromat,
   // 상하 반전
   if (s->id.PID == OV2640_PID)
     {
-      s->set_vflip (s, 1);  
+      s->set_vflip (s, 1);
     }
 
   xQueueCameraO = frame_o;
@@ -447,8 +449,15 @@ app_main (void)
 {
   app_wifi_main ();
   xQueueCameraFrame = xQueueCreate (2, sizeof (camera_fb_t *));
+  xQueueFrameI = xQueueCreate (2, sizeof (camera_fb_t *));
+
+
   //camera_settings (PIXFORMAT_RGB565, FRAMESIZE_QVGA, 2, xQueueCameraFrame);
   camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA, 2, xQueueCameraFrame);
   app_mdns_main ();
   open_httpd (xQueueCameraFrame, NULL, true);
+
+  // camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA, 2);
+  // app_mdns_main ();
+  // open_httpd (true);
 }
