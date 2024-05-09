@@ -16,6 +16,19 @@
   "idf.portWin": "COM5",
   "idf.flashType": "UART",
   "files.associations": {
-    "who_camera.h": "c"
+    "who_camera.h": "c",
+    "ets_sys.h": "c",
+    "cam_hal.h": "c",
+    "ll_cam.h": "c",
+    "ledc.h": "c",
+    "xclk.h": "c",
+    "esp_heap_caps.h": "c",
+    "lcd_cam_struct.h": "c",
+    "esp_camera.h": "c",
+    "ov2640.h": "c",
+    "sccb.h": "c",
+    "sensor.h": "c",
+    "ov2640_regs.h": "c",
+    "ov2640_settings.h": "c"
   }
 }
