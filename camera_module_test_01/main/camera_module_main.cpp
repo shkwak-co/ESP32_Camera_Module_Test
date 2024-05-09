@@ -140,7 +140,7 @@ pic_handler (httpd_req_t * req)
 }
 
 httpd_uri_t pic_uri = {
-  .uri = "/",
+  .uri = "/capture",
   .method = HTTP_GET,
   .handler = pic_handler,
   .user_ctx = NULL
@@ -292,9 +292,6 @@ esp_camera_setting (const pixformat_t pixel_fromat, const framesize_t frame_size
 extern "C" void
 app_main (void)
 {
-
-
-
   // 기존 AP모드 설정과 동일하여 그냥 사용함
   app_wifi_main ();
 
