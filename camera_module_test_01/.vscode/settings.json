@@ -16,7 +16,10 @@
   "idf.toolsPathWin": "d:\\esp\\espressif",
   "files.associations": {
     "esp_camera.h": "c",
-    "who_camera.h": "c"
+    "who_camera.h": "c",
+    "i2c.h": "c",
+    "esp_heap_caps.h": "c",
+    "app_httpd.hpp": "c"
   },
   "idf.flashType": "UART",
   "idf.portWin": "COM5"

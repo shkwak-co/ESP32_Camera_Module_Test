@@ -1,19 +1,25 @@
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/param.h>
 
-// who_camera.h
-#include "who_camera.h"
+// freeRTOS
 #include "freertos/FreeRTOS.h"
 #include "FreeRTOSConfig.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+
 #include "esp_camera.h"
 
 // app_wifi
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_mac.h"
+#include "esp_netif.h"
+#include "esp_tls.h"
 #include "esp_event.h"
+#include "esp_err.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "lwip/err.h"
@@ -22,9 +28,6 @@
 #include "freertos/event_groups.h"
 #include "mdns.h"
 
-// app_httpd
-#include "app_httpd.hpp"
-#include <list>
 #include "esp_http_server.h"
 #include "esp_timer.h"
 #include "img_converters.h"
@@ -34,19 +37,12 @@
 #include "app_wifi.h"
 
 // http_server
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/param.h>
-#include "esp_netif.h"
-#include "esp_tls.h"
 
-#include "esp_err.h"
 #include "esp_wifi_types.h"
 
 static const char *TAG = "UNIT_TEST";
 
 // Prototype BEGIN
-static size_t jpg_encode_stream (void *arg, size_t index, const void *data, size_t len);
 static esp_err_t capture_handler (httpd_req_t * req);
 static esp_err_t stream_handler (httpd_req_t * req);
 static esp_err_t index_handler (httpd_req_t * req);
@@ -80,6 +76,8 @@ void camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_si
 #define CAMERA_PIN_D5 18
 #define CAMERA_PIN_D6 17
 #define CAMERA_PIN_D7 16
+
+#define XCLK_FREQ_HZ 10000000
 // Camera Config END
 
 /**
@@ -100,22 +98,21 @@ static const char *_STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char *_STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char *_STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Timestamp: %d.%06d\r\n\r\n";
 
+httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
-static QueueHandle_t xQueueFrameI = NULL;
+static QueueHandle_t xQueueCameraFrame = NULL;
 
-
-
-extern "C" void
+void
 app_main (void)
 {
   app_wifi_main ();
-  xQueueFrameI = xQueueCreate (2, sizeof (camera_fb_t *));
+
+  xQueueCameraFrame = xQueueCreate (2, sizeof (camera_fb_t *));
   camera_settings (PIXFORMAT_JPEG, FRAMESIZE_QVGA);
-  //camera_settings (PIXFORMAT_JPEG, FRAMESIZE_XGA);
-  app_mdns_main ();
+  //camera_settings (PIXFORMAT_RGB565,FRAMESIZE_QVGA); // format 변경
+  //camera_settings (PIXFORMAT_JPEG, FRAMESIZE_XGA); // frame size 변경
   open_httpd ();
 }
-
 
 // server open BEGIN
 
@@ -125,7 +122,7 @@ capture_handler (httpd_req_t * req)
   camera_fb_t *frame = NULL;
   esp_err_t res = ESP_OK;
 
-  if (xQueueReceive (xQueueFrameI, &frame, portMAX_DELAY))
+  if (xQueueReceive (xQueueCameraFrame, &frame, portMAX_DELAY))
     {
       httpd_resp_set_type (req, "image/jpeg");
       httpd_resp_set_hdr (req, "Content-Disposition", "inline; filename=capture.jpg");
@@ -135,13 +132,8 @@ capture_handler (httpd_req_t * req)
       snprintf (ts, 32, "%lld.%06ld", frame->timestamp.tv_sec, frame->timestamp.tv_usec);
       httpd_resp_set_hdr (req, "X-Timestamp", (const char *) ts);
 
-      if (frame->format == PIXFORMAT_JPEG)
-        {
-          res = httpd_resp_send (req, (const char *) frame->buf, frame->len);
-        }
-
+      res = httpd_resp_send (req, (const char *) frame->buf, frame->len);
       esp_camera_fb_return (frame);
-
     }
   else
     {
@@ -174,7 +166,7 @@ stream_handler (httpd_req_t * req)
 
   while (true)
     {
-      if (xQueueReceive (xQueueFrameI, &frame, portMAX_DELAY))
+      if (xQueueReceive (xQueueCameraFrame, &frame, portMAX_DELAY))
         {
           _timestamp.tv_sec = frame->timestamp.tv_sec;
           _timestamp.tv_usec = frame->timestamp.tv_usec;
@@ -217,10 +209,8 @@ stream_handler (httpd_req_t * req)
           free (_jpg_buf);
           _jpg_buf = NULL;
         }
-
       esp_camera_fb_return (frame);
-
-
+      
       if (res != ESP_OK)
         {
           break;
@@ -252,11 +242,18 @@ open_httpd ()
   ESP_LOGI (TAG, "Starting web server on port: '%d'", config.server_port);
   if (httpd_start (&camera_httpd, &config) == ESP_OK)
     {
-      httpd_register_uri_handler (camera_httpd, &stream_uri);
+      //httpd_register_uri_handler (camera_httpd, &stream_uri);
       httpd_register_uri_handler (camera_httpd, &capture_uri);
     }
 
-
+  // 동영상 스트리밍 + 캡쳐를 동시에 하고싶으면 서버를 따로 열어야 함.
+  config.server_port += 1;
+  config.ctrl_port += 1;
+  ESP_LOGI (TAG, "Starting stream server on port: '%d'", config.server_port);
+  if (httpd_start (&stream_httpd, &config) == ESP_OK)
+    {
+      httpd_register_uri_handler (stream_httpd, &stream_uri);
+    }
 }
 
 // server open END
@@ -269,7 +266,7 @@ task_process_handler (void *arg)
     {
       camera_fb_t *frame = esp_camera_fb_get ();
       if (frame)
-        xQueueSend (xQueueFrameI, &frame, portMAX_DELAY);
+        xQueueSend (xQueueCameraFrame, &frame, portMAX_DELAY);
     }
 }
 
