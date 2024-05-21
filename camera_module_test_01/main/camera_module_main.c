@@ -42,8 +42,10 @@ void camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_si
 #define CAMERA_PIN_D7 16
 
 #define XCLK_FREQ_HZ 10000000
-// Camera Config END
 
+
+camera_fb_t *frame;
+// Camera Config END
 /**
  * - PART_BOUNDARY
  *  HTTP 프로토콜의 바디 부분에 데이터를 여러 부분으로 나눠서 보내는
@@ -83,28 +85,34 @@ app_main (void)
 static esp_err_t
 capture_handler (httpd_req_t * req)
 {
-  camera_fb_t *frame = NULL;
+  //camera_fb_t *frame = NULL;
   esp_err_t res = ESP_OK;
 
-  if (xQueueReceive (xQueueCameraFrame, &frame, portMAX_DELAY))
-    {
-      httpd_resp_set_type (req, "image/jpeg");
-      httpd_resp_set_hdr (req, "Content-Disposition", "inline; filename=capture.jpg");
-      httpd_resp_set_hdr (req, "Access-Control-Allow-Origin", "*");
+  httpd_resp_set_type (req, "image/jpeg");
+  httpd_resp_set_hdr (req, "Content-Disposition", "inline; filename=capture.jpg");
+  httpd_resp_set_hdr (req, "Access-Control-Allow-Origin", "*");
+  res = httpd_resp_send (req, (const char *) frame->buf, frame->len);
+  esp_camera_fb_return (frame);
 
-      char ts[32];
-      snprintf (ts, 32, "%lld.%06ld", frame->timestamp.tv_sec, frame->timestamp.tv_usec);
-      httpd_resp_set_hdr (req, "X-Timestamp", (const char *) ts);
+  // if (xQueueReceive (xQueueCameraFrame, &frame, portMAX_DELAY))
+  //   {
+  //     httpd_resp_set_type (req, "image/jpeg");
+  //     httpd_resp_set_hdr (req, "Content-Disposition", "inline; filename=capture.jpg");
+  //     httpd_resp_set_hdr (req, "Access-Control-Allow-Origin", "*");
 
-      res = httpd_resp_send (req, (const char *) frame->buf, frame->len);
-      esp_camera_fb_return (frame);
-    }
-  else
-    {
-      ESP_LOGE (TAG, "Camera capture failed");
-      httpd_resp_send_500 (req);
-      return ESP_FAIL;
-    }
+  //     char ts[32];
+  //     snprintf (ts, 32, "%lld.%06ld", frame->timestamp.tv_sec, frame->timestamp.tv_usec);
+  //     httpd_resp_set_hdr (req, "X-Timestamp", (const char *) ts);
+
+  //     res = httpd_resp_send (req, (const char *) frame->buf, frame->len);
+  //     esp_camera_fb_return (frame);
+  //   }
+  // else
+  //   {
+  //     ESP_LOGE (TAG, "Camera capture failed");
+  //     httpd_resp_send_500 (req);
+  //     return ESP_FAIL;
+  //   }
 
   return res;
 }
@@ -228,9 +236,11 @@ task_process_handler (void *arg)
 {
   while (true)
     {
-      camera_fb_t *frame = esp_camera_fb_get ();
-      if (frame)
-        xQueueSend (xQueueCameraFrame, &frame, portMAX_DELAY);
+      frame = esp_camera_fb_get ();
+      //camera_fb_t *frame = esp_camera_fb_get ();
+      // if (frame)
+      //   xQueueSend (xQueueCameraFrame, &frame, portMAX_DELAY);
+      vTaskDelay (pdMS_TO_TICKS (1000UL));
     }
 }
 
