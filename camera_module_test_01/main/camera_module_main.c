@@ -1,51 +1,15 @@
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/param.h>
-
-// freeRTOS
-#include "freertos/FreeRTOS.h"
-#include "FreeRTOSConfig.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
 
 #include "esp_camera.h"
-
-// app_wifi
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_mac.h"
-#include "esp_netif.h"
-#include "esp_tls.h"
-#include "esp_event.h"
-#include "esp_err.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
-#include "lwip/err.h"
-#include "lwip/sys.h"
-#include "lwip/ip4_addr.h"
-#include "freertos/event_groups.h"
-#include "mdns.h"
-
 #include "esp_http_server.h"
-#include "esp_timer.h"
-#include "img_converters.h"
-#include "fb_gfx.h"
-#include "app_mdns.h"
-#include "sdkconfig.h"
 #include "app_wifi.h"
 
-// http_server
-
-#include "esp_wifi_types.h"
 
 static const char *TAG = "UNIT_TEST";
 
 // Prototype BEGIN
 static esp_err_t capture_handler (httpd_req_t * req);
 static esp_err_t stream_handler (httpd_req_t * req);
-static esp_err_t index_handler (httpd_req_t * req);
 void open_httpd ();
 static void task_process_handler (void *arg);
 void camera_settings (const pixformat_t pixel_fromat, const framesize_t frame_size);
@@ -176,11 +140,11 @@ stream_handler (httpd_req_t * req)
               _jpg_buf = frame->buf;
               _jpg_buf_len = frame->len;
             }
-          else if (!frame2jpg (frame, 80, &_jpg_buf, &_jpg_buf_len))
-            {
-              ESP_LOGE (TAG, "JPEG compression failed");
-              res = ESP_FAIL;
-            }
+          // else if (!frame2jpg (frame, 80, &_jpg_buf, &_jpg_buf_len))
+          //   {
+          //     ESP_LOGE (TAG, "JPEG compression failed");
+          //     res = ESP_FAIL;
+          //   }
         }
       else
         {
@@ -204,13 +168,13 @@ stream_handler (httpd_req_t * req)
           res = httpd_resp_send_chunk (req, (const char *) _jpg_buf, _jpg_buf_len);
         }
 
-      if (frame->format != PIXFORMAT_JPEG)
-        {
-          free (_jpg_buf);
-          _jpg_buf = NULL;
-        }
+      // if (frame->format != PIXFORMAT_JPEG)
+      //   {
+      //     free (_jpg_buf);
+      //     _jpg_buf = NULL;
+      //   }
       esp_camera_fb_return (frame);
-      
+
       if (res != ESP_OK)
         {
           break;
