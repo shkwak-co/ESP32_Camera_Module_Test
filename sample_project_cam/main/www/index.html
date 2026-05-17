@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ESP32-CAM</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: #f5f7fb;
+      color: #17202a;
+    }
+
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .panel {
+      background: #fff;
+      border: 1px solid #d9e1ec;
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: 0 1px 2px rgba(20, 40, 70, .08);
+    }
+
+    h2 {
+      font-size: 16px;
+      margin: 0 0 10px;
+    }
+
+    img {
+      width: 100%;
+      height: auto;
+      background: #111;
+      border-radius: 6px;
+      display: block;
+      aspect-ratio: 4 / 3;
+      object-fit: contain;
+    }
+
+    button,
+    a.button {
+      appearance: none;
+      border: 0;
+      border-radius: 6px;
+      background: #0f766e;
+      color: #fff;
+      font-weight: 700;
+      padding: 10px 14px;
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+    }
+
+    button:hover,
+    a.button:hover {
+      background: #115e59;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .status {
+      font-size: 13px;
+      color: #52606d;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 760px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        display: block;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #12161d;
+        color: #eef2f6;
+      }
+
+      .panel {
+        background: #1a2029;
+        border-color: #2f3b4a;
+      }
+
+      .status {
+        color: #aab6c3;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ESP32-CAM</h1>
+      <a class="button" href="/capture" target="photo">Open Photo</a>
+    </header>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Live Stream</h2>
+        <img id="stream" alt="Live stream">
+        <div class="controls">
+          <button onclick="startStream()">Start Stream</button>
+          <button onclick="stopStream()">Stop Stream</button>
+          <button onclick="restartStream()">Restart Stream</button>
+        </div>
+        <p class="status">Connect to Wi-Fi ESP32-CAM and open http://192.168.4.1.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Photo</h2>
+        <img id="photo" name="photo" alt="Captured photo">
+        <div class="controls">
+          <button onclick="capturePhoto()">Capture Photo</button>
+        </div>
+        <p class="status" id="status">Ready.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const photo = document.getElementById('photo');
+    const stream = document.getElementById('stream');
+    const statusEl = document.getElementById('status');
+    const blank = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    const streamUrl = location.protocol + '//' + location.hostname + ':81/stream';
+    let streamTimer = 0;
+
+    function stopStream() {
+      clearTimeout(streamTimer);
+      stream.removeAttribute('src');
+      stream.src = blank;
+      fetch('/stop_stream?t=' + Date.now()).catch(() => {});
+    }
+
+    function startStream() {
+      clearTimeout(streamTimer);
+      stream.src = streamUrl + '?t=' + Date.now();
+    }
+
+    function capturePhoto() {
+      stopStream();
+      statusEl.textContent = 'Capturing...';
+      streamTimer = setTimeout(() => {
+        photo.onload = () => statusEl.textContent = 'Captured.';
+        photo.onerror = () => statusEl.textContent = 'Capture failed.';
+        photo.src = '/capture?t=' + Date.now();
+      }, 350);
+    }
+
+    function restartStream() {
+      stopStream();
+      streamTimer = setTimeout(startStream, 500);
+    }
+
+    window.addEventListener('pagehide', stopStream);
+    startStream();
+  </script>
+</body>
+</html>
