@@ -1,20 +1,25 @@
-# 폴더 구조
-!Bluetooth/*
-!Devkit/*
-!FreeRTOS/*
-!Networking/*
-!Peripherals/*
-!Protocols/*
-!Provisioning/*
-!Storage/*
-!System/*
-!Thirdparty/*
-
-# ignore
+# ESP-IDF build outputs
 **/build/
+**/managed_components/
 **/sdkconfig
 **/sdkconfig.old
 **/dependencies.lock
-**/managed_components/
+
+# Binary/build artifacts
+*.bin
+*.elf
+*.map
+*.o
+*.a
+
+# Generated files
+**/compile_commands.json
+**/flasher_args.json
 **/debug.log
 
+# Editor / OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
